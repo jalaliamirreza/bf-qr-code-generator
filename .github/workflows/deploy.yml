@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,13 +34,30 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Stage only the files the site actually serves. Uploading the repo root
+      # would ship node_modules/ (installed above) into the Pages artifact.
+      - name: Stage site
+        run: |
+          mkdir -p _site
+          cp index.html styles.css manifest.json service-worker.js \
+             icon.svg icon-maskable.svg _site/
+          cp -r dist _site/dist
+
+      # The service worker is cache-first with a hard-coded cache name, so a
+      # deploy is invisible to returning visitors until the SW file itself
+      # changes. Stamping the commit SHA makes every deploy a new cache.
+      - name: Version service worker cache
+        run: |
+          sed -i "s|^const CACHE_NAME = .*|const CACHE_NAME = \"bf-qr-${GITHUB_SHA}\";|" _site/service-worker.js
+          head -1 _site/service-worker.js
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "."
+          path: "_site"
 
   deploy:
     environment:
